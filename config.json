@@ -1,0 +1,76 @@
+{
+  "credit_info": {
+    "code": "IEQc2",
+    "name": "Occupant Experience",
+    "version": "LEED v5 BD+C",
+    "max_capped_points": 7.0
+  },
+  "model_paths": [
+    "./3D Model/Room RAO601.glb",
+    "./3D Model/room_model.glb",
+    "./room_model.glb"
+  ],
+  "presets": {
+    "baseline": {
+      "name": "Reset Baseline",
+      "nature_view_pct": 30,
+      "plant_coverage_pct": 0,
+      "operative_temp": 26.5,
+      "wall_stc": 35,
+      "ceiling_nrc": 0.50,
+      "hvac_noise_dba": 48,
+      "glazing_vlt_pct": 25,
+      "cri_rating": 75,
+      "sda_pct": 40
+    },
+    "recommended": {
+      "name": "Recommended Strategy",
+      "nature_view_pct": 60,
+      "plant_coverage_pct": 12,
+      "operative_temp": 22.5,
+      "wall_stc": 48,
+      "ceiling_nrc": 0.75,
+      "hvac_noise_dba": 38,
+      "glazing_vlt_pct": 45,
+      "cri_rating": 92,
+      "sda_pct": 60
+    },
+    "max_points": {
+      "name": "Max 7 Points (Capped)",
+      "nature_view_pct": 80,
+      "plant_coverage_pct": 15,
+      "operative_temp": 21.5,
+      "wall_stc": 54,
+      "ceiling_nrc": 0.85,
+      "hvac_noise_dba": 33,
+      "glazing_vlt_pct": 60,
+      "cri_rating": 96,
+      "sda_pct": 80
+    }
+  },
+  "thresholds": {
+    "biophilic": {
+      "view_tier1_pct": 50,
+      "view_tier2_pct": 75,
+      "plant_req_pct": 10,
+      "max_points": 3
+    },
+    "thermal": {
+      "temp_min": 20.0,
+      "temp_max": 24.0,
+      "max_points": 1
+    },
+    "acoustic": {
+      "tier1": { "stc": 45, "hvac_dba": 40, "points": 1 },
+      "tier2": { "stc": 50, "nrc": 0.75, "hvac_dba": 35, "points": 2 },
+      "max_points": 2
+    },
+    "lighting": {
+      "vlt_req_pct": 40,
+      "cri_req": 90,
+      "sda_tier1_pct": 55,
+      "sda_tier2_pct": 75,
+      "max_points": 5
+    }
+  }
+}

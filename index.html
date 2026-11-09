@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LEED v5 BD+C IEQc2: Occupant Experience 3D Simulator</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#10b981',
+              600: '#059669'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Three.js + OrbitControls + GLTFLoader CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(51, 65, 85, 0.8);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(71, 85, 105, 1);
+    }
+
+    /* Range slider custom styling */
+    input[type=range] {
+      -webkit-appearance: none;
+      background: #334155;
+      height: 6px;
+      border-radius: 9999px;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #10b981;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+      transition: transform 0.1s, background-color 0.2s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      background: #34d399;
+    }
+  </style>
+</head>
+<body class="h-full w-full overflow-hidden flex flex-col font-sans select-none antialiased bg-slate-950">
+
+  <!-- Top Navigation Header -->
+  <header class="h-14 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-4 flex items-center justify-between z-20 shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+        <i data-lucide="leaf" class="w-4 h-4"></i>
+      </div>
+      <div>
+        <h1 class="text-sm font-semibold tracking-wide flex items-center gap-2 text-slate-100">
+          LEED v5 BD+C <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">IEQc2</span>
+        </h1>
+        <p class="text-xs text-slate-400">Occupant Experience 3D Simulator</p>
+      </div>
+    </div>
+
+    <!-- Quick Presets Bar -->
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-slate-400 hidden md:inline">Presets:</span>
+      <button id="btnPresetBaseline" class="px-2.5 py-1 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+        Reset Baseline (0 Pts)
+      </button>
+      <button id="btnPresetRecommended" class="px-2.5 py-1 text-xs rounded-md bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/60 transition font-medium">
+        Recommended (5 Pts)
+      </button>
+      <button id="btnPresetMax" class="px-2.5 py-1 text-xs rounded-md bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 transition font-medium">
+        Max 7 Pts (Capped)
+      </button>
+    </div>
+
+    <!-- Model Status Badge -->
+    <div id="modelStatusBadge" class="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300">
+      <span id="modelStatusDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+      <span id="modelStatusText">Loading Scene...</span>
+    </div>
+  </header>
+
+  <!-- Main Split Body -->
+  <main class="flex-1 flex overflow-hidden relative">
+
+    <!-- LEFT: 3D Viewport Area (65%) -->
+    <div class="relative w-full lg:w-[65%] h-full bg-[#fffff0] overflow-hidden flex flex-col">
+      <!-- Three.js Canvas Container -->
+      <div id="canvasContainer" class="w-full h-full relative cursor-grab active:cursor-grabbing"></div>
+
+      <!-- Floating Viewport Controls -->
+      <div class="absolute top-4 left-4 z-10 flex flex-wrap gap-2">
+        <button id="btnResetCamera" class="px-3 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700/60 hover:bg-slate-800 text-xs font-medium text-slate-200 flex items-center gap-1.5 shadow-lg transition">
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-slate-400"></i>
+          <span>Reset Camera</span>
+        </button>
+        <button id="btnToggleCeiling" class="px-3 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700/60 hover:bg-slate-800 text-xs font-medium text-slate-200 flex items-center gap-1.5 shadow-lg transition">
+          <i data-lucide="layers" class="w-3.5 h-3.5 text-slate-400"></i>
+          <span>Ceiling: <b id="lblCeilingStatus" class="text-slate-400">OFF</b></span>
+        </button>
+      </div>
+
+      <!-- Floating Sound Wave Status Indicator -->
+      <div id="soundWaveStatusPill" class="absolute top-4 right-4 z-10 text-xs px-3 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md border border-purple-500/40 text-purple-300 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+        <span>Acoustic Wave: <b id="lblWaveOpacity">40%</b></span>
+      </div>
+
+      <!-- Floating Info Pill: 3D Model source -->
+      <div class="absolute bottom-4 left-4 z-10 text-xs px-3 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700/60 text-slate-300 flex items-center gap-2">
+        <i data-lucide="info" class="w-3.5 h-3.5 text-emerald-400"></i>
+        <span id="activeModelNotice">Room RAO601 Loaded</span>
+      </div>
+
+      <!-- 3D Navigation Guide -->
+      <div class="absolute bottom-4 right-4 z-10 hidden sm:flex items-center gap-2 text-[11px] text-slate-300 bg-slate-900/80 px-2.5 py-1 rounded-md border border-slate-700/60">
+        <span>Orbit: <kbd class="text-white font-mono">Left Drag</kbd></span> |
+        <span>Pan: <kbd class="text-white font-mono">Right Drag</kbd></span> |
+        <span>Zoom: <kbd class="text-white font-mono">Scroll</kbd></span>
+      </div>
+    </div>
+
+    <!-- RIGHT: Control & Scorecard Sidebar (35%) -->
+    <div class="w-full lg:w-[35%] h-full bg-slate-900/95 border-l border-slate-800 flex flex-col z-10 shadow-2xl">
+      
+      <!-- Scorecard Header Banner -->
+      <div class="p-4 border-b border-slate-800 bg-slate-900/70 shrink-0">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">LEED v5 EQc2 Scorecard</span>
+          <span id="scoreBadge" class="text-xs px-2.5 py-0.5 rounded-full font-medium border bg-red-950/60 text-red-300 border-red-700/50">
+            Baseline / Non-Compliant
+          </span>
+        </div>
+
+        <!-- Big Score Display -->
+        <div class="flex items-baseline justify-between">
+          <div class="flex items-baseline gap-1.5">
+            <span id="totalCappedScore" class="text-4xl font-extrabold text-slate-100 font-mono">0.0</span>
+            <span class="text-slate-400 font-medium">/ 7.0 Pts (Max Cap)</span>
+          </div>
+          <div class="text-right">
+            <div class="text-xs text-slate-400">Uncapped Total</div>
+            <div id="totalUncappedScore" class="text-sm font-semibold text-slate-300 font-mono">0.0 Pts</div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-slate-800 h-2.5 rounded-full mt-3 overflow-hidden border border-slate-700/50">
+          <div id="scoreProgressBar" class="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-300 rounded-full" style="width: 0%"></div>
+        </div>
+
+        <!-- Mini Category Pill Strip (4 Categories) -->
+        <div class="grid grid-cols-4 gap-1.5 mt-3 text-center text-[10px]">
+          <div class="bg-slate-800/80 p-1 rounded border border-slate-700/40">
+            <div class="text-slate-400 truncate">Biophilic</div>
+            <div id="pillBio" class="font-bold text-slate-200">0/3</div>
+          </div>
+          <div class="bg-slate-800/80 p-1 rounded border border-slate-700/40">
+            <div class="text-slate-400 truncate">Thermal</div>
+            <div id="pillTherm" class="font-bold text-slate-200">0/1</div>
+          </div>
+          <div class="bg-slate-800/80 p-1 rounded border border-slate-700/40">
+            <div class="text-slate-400 truncate">Sound</div>
+            <div id="pillSound" class="font-bold text-slate-200">0/2</div>
+          </div>
+          <div class="bg-slate-800/80 p-1 rounded border border-slate-700/40">
+            <div class="text-slate-400 truncate">Lighting</div>
+            <div id="pillLight" class="font-bold text-slate-200">0/5</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scrollable Parameter Accordions -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-3">
+
+        <!-- Category 1: Biophilic Design (Max 3 Pts) -->
+        <div class="rounded-xl bg-slate-800/60 border border-slate-700/50 overflow-hidden">
+          <div class="p-3 bg-slate-800/90 flex items-center justify-between cursor-pointer" onclick="toggleAccordion('bodyBio', 'iconBio')">
+            <div class="flex items-center gap-2">
+              <i data-lucide="trees" class="w-4 h-4 text-emerald-400"></i>
+              <span class="text-xs font-semibold text-slate-200">1. Biophilic Design</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="catScoreBio" class="text-xs font-mono font-bold text-emerald-400">0 / 3 Pts</span>
+              <i id="iconBio" data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform"></i>
+            </div>
+          </div>
+          <div id="bodyBio" class="p-3 space-y-3 text-xs border-t border-slate-700/40">
+            <!-- Direct Nature View -->
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>Direct Nature View % (GLZ_)</span>
+                <span id="valNatureView" class="font-mono text-emerald-400 font-bold">30%</span>
+              </div>
+              <input type="range" id="rngNatureView" min="0" max="100" value="30" class="w-full">
+              <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                <span>&lt;50% Baseline (0 pt)</span>
+                <span>50% Street Trees (1 pt)</span>
+                <span>100% Full Park (2 pts)</span>
+              </div>
+            </div>
+
+            <!-- Indoor Plant Coverage -->
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>Indoor Plant Coverage % (PLANT_)</span>
+                <span id="valPlantCoverage" class="font-mono text-emerald-400 font-bold">0%</span>
+              </div>
+              <input type="range" id="rngPlantCoverage" min="0" max="30" value="0" class="w-full">
+              <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                <span>0% None</span>
+                <span>10% (PLANT_10)</span>
+                <span>20% (PLANT_20)</span>
+                <span>30% (PLANT_30)</span>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-0.5">Threshold: &ge;10% coverage awards +1 pt</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category 2: Thermal Comfort (Max 1 Pt) -->
+        <div class="rounded-xl bg-slate-800/60 border border-slate-700/50 overflow-hidden">
+          <div class="p-3 bg-slate-800/90 flex items-center justify-between cursor-pointer" onclick="toggleAccordion('bodyTherm', 'iconTherm')">
+            <div class="flex items-center gap-2">
+              <i data-lucide="thermometer" class="w-4 h-4 text-orange-400"></i>
+              <span class="text-xs font-semibold text-slate-200">2. Thermal Comfort (ASHRAE 55)</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="catScoreTherm" class="text-xs font-mono font-bold text-orange-400">0 / 1 Pt</span>
+              <i id="iconTherm" data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform"></i>
+            </div>
+          </div>
+          <div id="bodyTherm" class="p-3 space-y-3 text-xs border-t border-slate-700/40">
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>Operative Temperature (&deg;C)</span>
+                <span id="valOperativeTemp" class="font-mono text-orange-400 font-bold">26.5 &deg;C</span>
+              </div>
+              <input type="range" id="rngOperativeTemp" min="18.0" max="28.0" step="0.5" value="26.5" class="w-full">
+              <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                <span>18°C (Neutral Daylight)</span>
+                <span>20-24°C Comfort (+1 pt)</span>
+                <span>28°C (Warm Amber)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category 3: Sound & Acoustics (Max 2 Pts) -->
+        <div class="rounded-xl bg-slate-800/60 border border-slate-700/50 overflow-hidden">
+          <div class="p-3 bg-slate-800/90 flex items-center justify-between cursor-pointer" onclick="toggleAccordion('bodySound', 'iconSound')">
+            <div class="flex items-center gap-2">
+              <i data-lucide="volume-2" class="w-4 h-4 text-purple-400"></i>
+              <span class="text-xs font-semibold text-slate-200">3. Sound & Acoustics</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="catScoreSound" class="text-xs font-mono font-bold text-purple-400">0 / 2 Pts</span>
+              <i id="iconSound" data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform"></i>
+            </div>
+          </div>
+          <div id="bodySound" class="p-3 space-y-3 text-xs border-t border-slate-700/40">
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>HVAC Background Noise (dBA)</span>
+                <span id="valHVACNoise" class="font-mono text-purple-400 font-bold">48 dBA</span>
+              </div>
+              <input type="range" id="rngHVACNoise" min="25" max="55" value="48" class="w-full">
+              <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                <span>&lt;35 dBA (20% wave)</span>
+                <span>35-40 dBA (40% wave)</span>
+                <span>55 dBA (80% wave)</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>Wall Partition STC Rating (WALL_)</span>
+                <span id="valWallSTC" class="font-mono text-purple-400 font-bold">35</span>
+              </div>
+              <input type="range" id="rngWallSTC" min="30" max="60" value="35" class="w-full">
+              <div class="text-[10px] text-slate-500 mt-0.5">Tier 1 &ge; 45 | Tier 2 &ge; 50</div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>Ceiling NRC Rating (CEIL_)</span>
+                <span id="valCeilingNRC" class="font-mono text-purple-400 font-bold">0.50</span>
+              </div>
+              <input type="range" id="rngCeilingNRC" min="0.40" max="0.95" step="0.05" value="0.50" class="w-full">
+              <div class="text-[10px] text-slate-500 mt-0.5">Tier 2 requires NRC &ge; 0.75 + STC &ge; 50 + Noise &le; 35 dBA</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category 4: Lighting Quality (Max 5 Pts) -->
+        <div class="rounded-xl bg-slate-800/60 border border-slate-700/50 overflow-hidden">
+          <div class="p-3 bg-slate-800/90 flex items-center justify-between cursor-pointer" onclick="toggleAccordion('bodyLight', 'iconLight')">
+            <div class="flex items-center gap-2">
+              <i data-lucide="sun" class="w-4 h-4 text-yellow-400"></i>
+              <span class="text-xs font-semibold text-slate-200">4. Lighting Quality</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="catScoreLight" class="text-xs font-mono font-bold text-yellow-400">0 / 5 Pts</span>
+              <i id="iconLight" data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform"></i>
+            </div>
+          </div>
+          <div id="bodyLight" class="p-3 space-y-3 text-xs border-t border-slate-700/40">
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>Glazing Light Transmittance (VLT %)</span>
+                <span id="valGlazingVLT" class="font-mono text-yellow-400 font-bold">25%</span>
+              </div>
+              <input type="range" id="rngGlazingVLT" min="10" max="80" value="25" class="w-full">
+              <div class="text-[10px] text-slate-500 mt-0.5">Threshold: VLT &ge; 40% (+1 pt)</div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>Color Rendering Index (CRI Ra)</span>
+                <span id="valCRI" class="font-mono text-yellow-400 font-bold">75</span>
+              </div>
+              <input type="range" id="rngCRI" min="70" max="98" value="75" class="w-full">
+              <div class="text-[10px] text-slate-500 mt-0.5">Threshold: CRI &ge; 90 (+1 pt)</div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-slate-300 mb-1">
+                <span>Spatial Daylight Autonomy (sDA %)</span>
+                <span id="valSDA" class="font-mono text-yellow-400 font-bold">40%</span>
+              </div>
+              <input type="range" id="rngSDA" min="10" max="95" value="40" class="w-full">
+              <div class="text-[10px] text-slate-500 mt-0.5">&ge;55% (+1 pt) | &ge;75% (+3 pts)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Information / Guidance Card -->
+        <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+          <div class="flex items-center gap-1.5 text-slate-300 font-medium">
+            <i data-lucide="info" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>LEED v5 Rule Summary</span>
+          </div>
+          <p>IEQ Credit EQc2 aggregates wellness pillars into one occupant experience credit capped at <b>7.0 points</b>.</p>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- APP SCRIPT & 3D ENGINE -->
+  <script>
+    // --- Application State ---
+    const state = {
+      // Biophilic
+      natureViewPct: 30,
+      plantCoveragePct: 0,
+      // Thermal
+      operativeTemp: 26.5,
+      // Acoustics
+      hvacNoiseDBA: 48,
+      wallSTC: 35,
+      ceilingNRC: 0.50,
+      // Lighting
+      glazingVLTPct: 25,
+      criRating: 75,
+      sdaPct: 40,
+      // 3D View flags
+      ceilingVisible: false
+    };
+
+    // --- Embedded Configuration Fallback ---
+    let appConfig = {
+      model_paths: ["./3D Model/Room RAO601.glb", "./3D Model/room_model.glb", "./room_model.glb"],
+      presets: {
+        baseline: {
+          natureViewPct: 30, plantCoveragePct: 0,
+          operativeTemp: 26.5,
+          hvacNoiseDBA: 48, wallSTC: 35, ceilingNRC: 0.50,
+          glazingVLTPct: 25, criRating: 75, sdaPct: 40
+        },
+        recommended: {
+          natureViewPct: 60, plantCoveragePct: 12,
+          operativeTemp: 22.5,
+          hvacNoiseDBA: 38, wallSTC: 48, ceilingNRC: 0.75,
+          glazingVLTPct: 45, criRating: 92, sdaPct: 60
+        },
+        max_points: {
+          natureViewPct: 80, plantCoveragePct: 15,
+          operativeTemp: 21.5,
+          hvacNoiseDBA: 33, wallSTC: 54, ceilingNRC: 0.85,
+          glazingVLTPct: 60, criRating: 96, sdaPct: 80
+        }
+      }
+    };
+
+    // Load config.json if running on server
+    fetch('./config.json')
+      .then(res => res.json())
+      .then(json => {
+        if (json.presets) {
+          appConfig.model_paths = json.model_paths || appConfig.model_paths;
+          if (json.presets.baseline) {
+            appConfig.presets.baseline = {
+              natureViewPct: json.presets.baseline.nature_view_pct,
+              plantCoveragePct: json.presets.baseline.plant_coverage_pct,
+              operativeTemp: json.presets.baseline.operative_temp,
+              hvacNoiseDBA: json.presets.baseline.hvac_noise_dba,
+              wallSTC: json.presets.baseline.wall_stc,
+              ceilingNRC: json.presets.baseline.ceiling_nrc,
+              glazingVLTPct: json.presets.baseline.glazing_vlt_pct,
+              criRating: json.presets.baseline.cri_rating,
+              sdaPct: json.presets.baseline.sda_pct
+            };
+          }
+          if (json.presets.recommended) {
+            appConfig.presets.recommended = {
+              natureViewPct: json.presets.recommended.nature_view_pct,
+              plantCoveragePct: json.presets.recommended.plant_coverage_pct,
+              operativeTemp: json.presets.recommended.operative_temp,
+              hvacNoiseDBA: json.presets.recommended.hvac_noise_dba,
+              wallSTC: json.presets.recommended.wall_stc,
+              ceilingNRC: json.presets.recommended.ceiling_nrc,
+              glazingVLTPct: json.presets.recommended.glazing_vlt_pct,
+              criRating: json.presets.recommended.cri_rating,
+              sdaPct: json.presets.recommended.sda_pct
+            };
+          }
+          if (json.presets.max_points) {
+            appConfig.presets.max_points = {
+              natureViewPct: json.presets.max_points.nature_view_pct,
+              plantCoveragePct: json.presets.max_points.plant_coverage_pct,
+              operativeTemp: json.presets.max_points.operative_temp,
+              hvacNoiseDBA: json.presets.max_points.hvac_noise_dba,
+              wallSTC: json.presets.max_points.wall_stc,
+              ceilingNRC: json.presets.max_points.ceiling_nrc,
+              glazingVLTPct: json.presets.max_points.glazing_vlt_pct,
+              criRating: json.presets.max_points.cri_rating,
+              sdaPct: json.presets.max_points.sda_pct
+            };
+          }
+        }
+      })
+      .catch(() => console.log('Using embedded default config.'));
+
+    // --- Accordion Toggle Helper ---
+    function toggleAccordion(bodyId, iconId) {
+      const el = document.getElementById(bodyId);
+      const icon = document.getElementById(iconId);
+      if (el.classList.contains('hidden')) {
+        el.classList.remove('hidden');
+        icon.style.transform = 'rotate(0deg)';
+      } else {
+        el.classList.add('hidden');
+        icon.style.transform = 'rotate(-90deg)';
+      }
+    }
+
+    // --- Scoring Engine (4 Categories, 7.0 Cap) ---
+    function calculateLEEDScore() {
+      // 1. Biophilic Design (Max 3)
+      let bioPts = 0;
+      if (state.natureViewPct >= 75) bioPts += 2;
+      else if (state.natureViewPct >= 50) bioPts += 1;
+      if (state.plantCoveragePct >= 10) bioPts += 1;
+      bioPts = Math.min(3, bioPts);
+
+      // 2. Thermal Comfort (Max 1)
+      let thermPts = 0;
+      if (state.operativeTemp >= 20.0 && state.operativeTemp <= 24.0) {
+        thermPts = 1;
+      }
+
+      // 3. Sound & Acoustics (Max 2)
+      let soundPts = 0;
+      if (state.wallSTC >= 50 && state.ceilingNRC >= 0.75 && state.hvacNoiseDBA <= 35) {
+        soundPts = 2;
+      } else if (state.wallSTC >= 45 && state.hvacNoiseDBA <= 40) {
+        soundPts = 1;
+      }
+
+      // 4. Lighting Quality (Max 5)
+      let lightPts = 0;
+      if (state.glazingVLTPct >= 40) lightPts += 1;
+      if (state.criRating >= 90) lightPts += 1;
+      if (state.sdaPct >= 75) lightPts += 3;
+      else if (state.sdaPct >= 55) lightPts += 1;
+      lightPts = Math.min(5, lightPts);
+
+      // Aggregations
+      const uncappedTotal = bioPts + thermPts + soundPts + lightPts;
+      const cappedTotal = Math.min(7.0, uncappedTotal);
+
+      return {
+        bioPts, thermPts, soundPts, lightPts,
+        uncappedTotal, cappedTotal
+      };
+    }
+
+    // --- UI Update Function ---
+    function updateUI() {
+      // Numerical labels
+      document.getElementById('valNatureView').innerText = `${state.natureViewPct}%`;
+      document.getElementById('valPlantCoverage').innerText = `${state.plantCoveragePct}%`;
+      document.getElementById('valOperativeTemp').innerText = `${state.operativeTemp.toFixed(1)} °C`;
+      document.getElementById('valHVACNoise').innerText = `${state.hvacNoiseDBA} dBA`;
+      document.getElementById('valWallSTC').innerText = state.wallSTC;
+      document.getElementById('valCeilingNRC').innerText = state.ceilingNRC.toFixed(2);
+      document.getElementById('valGlazingVLT').innerText = `${state.glazingVLTPct}%`;
+      document.getElementById('valCRI').innerText = state.criRating;
+      document.getElementById('valSDA').innerText = `${state.sdaPct}%`;
+
+      // Range slider values
+      document.getElementById('rngNatureView').value = state.natureViewPct;
+      document.getElementById('rngPlantCoverage').value = state.plantCoveragePct;
+      document.getElementById('rngOperativeTemp').value = state.operativeTemp;
+      document.getElementById('rngHVACNoise').value = state.hvacNoiseDBA;
+      document.getElementById('rngWallSTC').value = state.wallSTC;
+      document.getElementById('rngCeilingNRC').value = state.ceilingNRC;
+      document.getElementById('rngGlazingVLT').value = state.glazingVLTPct;
+      document.getElementById('rngCRI').value = state.criRating;
+      document.getElementById('rngSDA').value = state.sdaPct;
+
+      // Recalculate Score
+      const res = calculateLEEDScore();
+
+      document.getElementById('catScoreBio').innerText = `${res.bioPts} / 3 Pts`;
+      document.getElementById('catScoreTherm').innerText = `${res.thermPts} / 1 Pt`;
+      document.getElementById('catScoreSound').innerText = `${res.soundPts} / 2 Pts`;
+      document.getElementById('catScoreLight').innerText = `${res.lightPts} / 5 Pts`;
+
+      document.getElementById('pillBio').innerText = `${res.bioPts}/3`;
+      document.getElementById('pillTherm').innerText = `${res.thermPts}/1`;
+      document.getElementById('pillSound').innerText = `${res.soundPts}/2`;
+      document.getElementById('pillLight').innerText = `${res.lightPts}/5`;
+
+      document.getElementById('totalCappedScore').innerText = res.cappedTotal.toFixed(1);
+      document.getElementById('totalUncappedScore').innerText = `${res.uncappedTotal.toFixed(1)} Pts`;
+
+      // Progress bar (scaled against 7 points max)
+      const pct = Math.min(100, (res.cappedTotal / 7.0) * 100);
+      document.getElementById('scoreProgressBar').style.width = `${pct}%`;
+
+      // Status Badge
+      const badge = document.getElementById('scoreBadge');
+      if (res.cappedTotal >= 7.0) {
+        badge.innerText = 'Platinum Exemplary Performance';
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium border bg-cyan-950/70 text-cyan-300 border-cyan-500/60 shadow-[0_0_12px_rgba(6,182,212,0.3)]';
+      } else if (res.cappedTotal >= 5.0) {
+        badge.innerText = 'LEED Gold Strategy';
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium border bg-emerald-950/70 text-emerald-300 border-emerald-500/60';
+      } else if (res.cappedTotal >= 3.0) {
+        badge.innerText = 'LEED Silver Target';
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium border bg-amber-950/70 text-amber-300 border-amber-500/60';
+      } else {
+        badge.innerText = 'Baseline / Non-Compliant';
+        badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium border bg-red-950/60 text-red-300 border-red-700/50';
+      }
+
+      // Synchronize 3D Scene
+      update3DScene();
+    }
+
+    // --- Preset Loading ---
+    function applyPreset(key) {
+      const p = appConfig.presets[key];
+      if (!p) return;
+      Object.assign(state, p);
+      updateUI();
+    }
+
+    // --- 3D Scene Engine (Three.js) ---
+    let scene, camera, renderer, controls;
+    let roomGroup, ceilingMeshes = [];
+    let outdoorStreetGroup, siteFloorMesh;
+    let ambientLight, sunLight;
+    let modelBounds = { center: new THREE.Vector3(0, 0, 0), size: new THREE.Vector3(10, 3, 10) };
+
+    // Component Registry for Tag-Based Binding
+    const bindings = {
+      occupants: [],     // OCC_
+      windows: [],       // GLZ_
+      ceilings: [],      // CEIL_
+      lights: [],        // LIGHT_
+      lightObjects: [],  // Three.js PointLights created dynamically
+      plants10: [],      // PLANT_10
+      plants20: [],      // PLANT_20
+      plants30: []       // PLANT_30
+    };
+
+    // Sound Wave Rings Array (distributed on top of OCC_)
+    const soundWaveEmitters = [];
+
+    function init3D() {
+      const container = document.getElementById('canvasContainer');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      // 1. Scene with light background #fffff0
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xfffff0);
+
+      // 2. Camera: Positioned in isometric view matching user screenshot
+      camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 2000);
+      camera.position.set(450, 350, 480);
+
+      // 3. Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      // 4. Controls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2 + 0.05;
+      controls.minDistance = 10;
+      controls.maxDistance = 1500;
+      controls.target.set(160, 40, 100);
+
+      // 5. Environmental Lighting
+      ambientLight = new THREE.AmbientLight(0xfffbeb, 0.9);
+      scene.add(ambientLight);
+
+      sunLight = new THREE.DirectionalLight(0xfffaed, 1.3);
+      sunLight.position.set(300, 500, 350);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 10;
+      sunLight.shadow.camera.far = 1500;
+      sunLight.shadow.camera.left = -400;
+      sunLight.shadow.camera.right = 400;
+      sunLight.shadow.camera.top = 400;
+      sunLight.shadow.camera.bottom = -400;
+      sunLight.shadow.bias = -0.0005;
+      scene.add(sunLight);
+
+      // 6. Build Expanded Site Floor (#202a44)
+      buildSiteFloor();
+
+      // 7. Load GLB Model
+      loadModel();
+
+      window.addEventListener('resize', onWindowResize);
+      animate();
+    }
+
+    function onWindowResize() {
+      const container = document.getElementById('canvasContainer');
+      if (!container) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+
+    // --- Expanded Site Floor (#202a44) covering entire building ---
+    function buildSiteFloor() {
+      // Large site ground plane (800x800 units) to cover beyond the marked building boundary
+      const siteGeo = new THREE.PlaneGeometry(900, 900);
+      const siteMat = new THREE.MeshStandardMaterial({
+        color: 0x202a44,
+        roughness: 0.85,
+        metalness: 0.1
+      });
+      siteFloorMesh = new THREE.Mesh(siteGeo, siteMat);
+      siteFloorMesh.rotation.x = -Math.PI / 2;
+      siteFloorMesh.position.set(160, -0.5, 100);
+      siteFloorMesh.receiveShadow = true;
+      scene.add(siteFloorMesh);
+    }
+
+    // --- Sound Wave Emitters on top of OCC_ desks ---
+    function createSoundWaveEmitter(pos) {
+      const emitterGroup = new THREE.Group();
+      emitterGroup.position.copy(pos);
+      // Place ripple rings above desk head height (approx +25 to +40 units up)
+      emitterGroup.position.y += 35;
+
+      const rings = [];
+      const ringCount = 3;
+      for (let i = 0; i < ringCount; i++) {
+        const ringGeo = new THREE.RingGeometry(8, 11, 32);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0xa855f7,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.4
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.userData = { scale: 0.5 + i * 0.8 };
+        emitterGroup.add(ring);
+        rings.push(ring);
+      }
+
+      scene.add(emitterGroup);
+      soundWaveEmitters.push({ group: emitterGroup, rings: rings });
+    }
+
+    // --- GLTF Model Loader & Architectural Shading (#d3d3d3) ---
+    function loadModel() {
+      const loader = new THREE.GLTFLoader();
+      const pathsToTry = appConfig.model_paths || ["./3D Model/Room RAO601.glb", "./3D Model/room_model.glb", "./room_model.glb"];
+      let triedIndex = 0;
+
+      function attemptLoad() {
+        if (triedIndex >= pathsToTry.length) {
+          console.error("Could not load model from specified paths.");
+          return;
+        }
+
+        const currentPath = pathsToTry[triedIndex];
+        loader.load(
+          currentPath,
+          (gltf) => {
+            console.log("Loaded custom 3D model:", currentPath);
+            roomGroup = gltf.scene;
+
+            // Compute exact bounding box of the model
+            const box = new THREE.Box3().setFromObject(roomGroup);
+            box.getCenter(modelBounds.center);
+            box.getSize(modelBounds.size);
+
+            // Re-center site floor directly beneath room bounds
+            if (siteFloorMesh) {
+              siteFloorMesh.position.set(modelBounds.center.x, box.min.y - 0.5, modelBounds.center.z);
+              const maxDim = Math.max(modelBounds.size.x, modelBounds.size.z) * 3.5;
+              siteFloorMesh.scale.set(maxDim / 900, maxDim / 900, 1);
+            }
+
+            // Target camera to center of room
+            controls.target.copy(modelBounds.center);
+            camera.position.set(
+              modelBounds.center.x + modelBounds.size.x * 1.5,
+              modelBounds.center.y + modelBounds.size.y * 2.8,
+              modelBounds.center.z + modelBounds.size.z * 1.8
+            );
+            controls.update();
+
+            // Architectural clay material for solid building properties (#d3d3d3)
+            const clayMat = new THREE.MeshStandardMaterial({
+              color: 0xd3d3d3,
+              roughness: 0.75,
+              metalness: 0.05
+            });
+
+            // Vision glazing physical material
+            const glassMat = new THREE.MeshPhysicalMaterial({
+              color: 0x93c5fd,
+              transparent: true,
+              opacity: 0.35,
+              roughness: 0.1,
+              transmission: 0.85,
+              thickness: 1.0
+            });
+
+            const uniqueOccPositions = [];
+
+            // Traverse and apply styling + tag bindings
+            roomGroup.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+
+              const n = (child.name || "").toUpperCase();
+
+              // Plants (PLANT_10, PLANT_20, PLANT_30)
+              if (n.includes("PLANT_10")) {
+                bindings.plants10.push(child);
+              } else if (n.includes("PLANT_20")) {
+                bindings.plants20.push(child);
+              } else if (n.includes("PLANT_30")) {
+                bindings.plants30.push(child);
+              }
+              // Windows (GLZ_)
+              else if (n.startsWith("GLZ_") || n.includes("GLZ_")) {
+                if (child.isMesh) {
+                  child.material = glassMat.clone();
+                }
+                bindings.windows.push(child);
+              }
+              // Ceilings (CEIL_) -> OFF by default!
+              else if (n.startsWith("CEIL_") || n.includes("CEIL_")) {
+                if (child.isMesh) child.material = clayMat.clone();
+                child.visible = false; // Initial state OFF
+                ceilingMeshes.push(child);
+                bindings.ceilings.push(child);
+              }
+              // Lights (LIGHT_)
+              else if (n.startsWith("LIGHT_") || n.includes("LIGHT_")) {
+                // Make fixture emissive
+                if (child.isMesh) {
+                  child.material = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    emissive: 0xffedd5,
+                    emissiveIntensity: 1.2
+                  });
+                }
+                bindings.lights.push(child);
+
+                // Attach real downward PointLight at world coordinate
+                const worldPos = new THREE.Vector3();
+                child.getWorldPosition(worldPos);
+                const light = new THREE.PointLight(0xffedd5, 1.5, 120);
+                light.position.copy(worldPos);
+                light.position.y -= 5;
+                light.castShadow = true;
+                light.shadow.bias = -0.002;
+                scene.add(light);
+                bindings.lightObjects.push(light);
+              }
+              // Occupant Workstations (OCC_)
+              else if (n.startsWith("OCC_") || n.includes("OCC_")) {
+                if (child.isMesh) child.material = clayMat;
+                bindings.occupants.push(child);
+
+                // Collect distinct workstation world positions for sound waves
+                const occPos = new THREE.Vector3();
+                child.getWorldPosition(occPos);
+                const isClose = uniqueOccPositions.some(p => p.distanceTo(occPos) < 25);
+                if (!isClose) {
+                  uniqueOccPositions.push(occPos);
+                }
+              }
+              // All other architectural properties -> Color #d3d3d3
+              else if (child.isMesh && !n.includes("PLANT")) {
+                child.material = clayMat;
+              }
+            });
+
+            // Create sound wave emitters above the collected OCC_ positions
+            if (uniqueOccPositions.length > 0) {
+              uniqueOccPositions.forEach(pos => createSoundWaveEmitter(pos));
+            } else {
+              // Fallback: 4 grid points across room
+              for (let dx = -0.3; dx <= 0.3; dx += 0.6) {
+                for (let dz = -0.3; dz <= 0.3; dz += 0.6) {
+                  const fallbackPos = new THREE.Vector3(
+                    modelBounds.center.x + modelBounds.size.x * dx,
+                    modelBounds.center.y,
+                    modelBounds.center.z + modelBounds.size.z * dz
+                  );
+                  createSoundWaveEmitter(fallbackPos);
+                }
+              }
+            }
+
+            scene.add(roomGroup);
+
+            // Add outdoor nature trees outside glazing facade
+            buildOutdoorNature(modelBounds);
+
+            document.getElementById('modelStatusDot').className = "w-2 h-2 rounded-full bg-cyan-400";
+            document.getElementById('modelStatusText').innerText = "Room RAO601 Active";
+            document.getElementById('activeModelNotice').innerText = `Active Model: ${currentPath}`;
+            
+            updateUI();
+          },
+          undefined,
+          () => {
+            triedIndex++;
+            attemptLoad();
+          }
+        );
+      }
+
+      attemptLoad();
+    }
+
+    // --- Outdoor Nature Trees outside the windows ---
+    function buildOutdoorNature(bounds) {
+      outdoorStreetGroup = new THREE.Group();
+      // Position outside the window facade
+      outdoorStreetGroup.position.set(bounds.center.x + bounds.size.x * 0.7, 0, bounds.center.z);
+
+      function createNatureTree(x, z, scale = 1.0) {
+        const treeGroup = new THREE.Group();
+        treeGroup.position.set(x, 0, z);
+
+        const trunkGeo = new THREE.CylinderGeometry(1.5 * scale, 2.5 * scale, 35 * scale, 8);
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.position.y = 17.5 * scale;
+        treeGroup.add(trunk);
+
+        const foliageGeo = new THREE.DodecahedronGeometry(18 * scale);
+        const foliageMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.8 });
+        const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+        foliage.position.y = 42 * scale;
+        treeGroup.add(foliage);
+
+        return treeGroup;
+      }
+
+      const tier1 = new THREE.Group();
+      tier1.name = "nature_tier1";
+      tier1.add(createNatureTree(40, -40, 1.2));
+      tier1.add(createNatureTree(60, 30, 1.0));
+      outdoorStreetGroup.add(tier1);
+
+      const tier2 = new THREE.Group();
+      tier2.name = "nature_tier2";
+      tier2.add(createNatureTree(90, -80, 1.4));
+      tier2.add(createNatureTree(110, 0, 1.3));
+      tier2.add(createNatureTree(95, 70, 1.5));
+      outdoorStreetGroup.add(tier2);
+
+      scene.add(outdoorStreetGroup);
+    }
+
+    // --- Helper to Set Object Hierarchy Opacity ---
+    function setGroupOpacity(groupOrMesh, opacityVal) {
+      if (!groupOrMesh) return;
+      groupOrMesh.traverse ? groupOrMesh.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material.transparent = true;
+          child.material.opacity = opacityVal;
+          child.visible = opacityVal > 0.01;
+        }
+      }) : (groupOrMesh.material && (groupOrMesh.material.opacity = opacityVal));
+    }
+
+    // --- 3D Scene Dynamic Synchronization ---
+    function update3DScene() {
+      // 1. Biophilic: Direct Nature View % Outside Window
+      if (outdoorStreetGroup) {
+        const tier1 = outdoorStreetGroup.getObjectByName("nature_tier1");
+        const tier2 = outdoorStreetGroup.getObjectByName("nature_tier2");
+        if (tier1) tier1.visible = state.natureViewPct >= 50;
+        if (tier2) tier2.visible = state.natureViewPct >= 80;
+      }
+
+      // 2. Biophilic: Staged Plant Coverage Opacity Transitions
+      // Tier 1 (1% - 10%)
+      const op10 = THREE.MathUtils.clamp(state.plantCoveragePct / 10.0, 0.0, 1.0);
+      bindings.plants10.forEach(p => setGroupOpacity(p, op10));
+
+      // Tier 2 (11% - 20%)
+      const op20 = THREE.MathUtils.clamp((state.plantCoveragePct - 10.0) / 10.0, 0.0, 1.0);
+      bindings.plants20.forEach(p => setGroupOpacity(p, op20));
+
+      // Tier 3 (21% - 30%)
+      const op30 = THREE.MathUtils.clamp((state.plantCoveragePct - 20.0) / 10.0, 0.0, 1.0);
+      bindings.plants30.forEach(p => setGroupOpacity(p, op30));
+
+      // 3. Thermal Comfort: Color Warmth Progression (18°C neutral to 28°C amber)
+      const warmthFactor = THREE.MathUtils.clamp((state.operativeTemp - 18.0) / 10.0, 0.0, 1.0);
+      if (ambientLight) {
+        // From crisp neutral white (0.16) to warm amber (0.07)
+        ambientLight.color.setHSL(0.16 - warmthFactor * 0.09, 0.3 + warmthFactor * 0.5, 0.9 - warmthFactor * 0.1);
+      }
+
+      // 4. Sound & Acoustics: Sound Wave Opacity Calculation
+      // <35 dBA: 20% opacity; 35-40 dBA: ~40%; 55 dBA: 80%
+      let waveOpacity = 0.40;
+      if (state.hvacNoiseDBA < 35) {
+        waveOpacity = 0.20;
+      } else if (state.hvacNoiseDBA <= 40) {
+        waveOpacity = 0.20 + ((state.hvacNoiseDBA - 35) / 5) * 0.20; // 0.20 to 0.40
+      } else {
+        waveOpacity = 0.40 + ((state.hvacNoiseDBA - 40) / 15) * 0.40; // 0.40 to 0.80
+      }
+
+      document.getElementById('lblWaveOpacity').innerText = `${Math.round(waveOpacity * 100)}%`;
+      soundWaveEmitters.forEach(emitter => {
+        emitter.rings.forEach(ring => {
+          ring.material.opacity = waveOpacity;
+          ring.visible = waveOpacity > 0.05;
+        });
+      });
+
+      // 5. Lighting Quality: Glazing VLT and Luminaire Emissivity
+      const vltRatio = state.glazingVLTPct / 100.0;
+      bindings.windows.forEach(win => {
+        if (win.material) {
+          win.material.transparent = true;
+          win.material.opacity = 0.15 + vltRatio * 0.65;
+          win.material.roughness = THREE.MathUtils.clamp(1.0 - vltRatio, 0.05, 0.85);
+        }
+      });
+
+      // Luminaire CRI warmth & intensity
+      const criFactor = (state.criRating - 70) / 28.0; // 0 (70 Ra) to 1 (98 Ra)
+      const lightIntensity = 1.0 + criFactor * 0.8;
+
+      bindings.lights.forEach(l => {
+        if (l.material && l.material.emissive) {
+          l.material.emissiveIntensity = lightIntensity;
+          l.material.emissive.setHSL(0.14 - criFactor * 0.06, 0.75, 0.6);
+        }
+      });
+
+      bindings.lightObjects.forEach(light => {
+        light.intensity = lightIntensity;
+        light.color.setHSL(0.14 - criFactor * 0.06, 0.75, 0.7);
+      });
+    }
+
+    // --- Animation Loop ---
+    let clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+
+      const delta = clock.getDelta();
+
+      // Pulsing Expanding Sound Wave Rings over OCC_ desks
+      soundWaveEmitters.forEach(emitter => {
+        emitter.rings.forEach(ring => {
+          ring.userData.scale += delta * 1.5;
+          if (ring.userData.scale > 3.5) {
+            ring.userData.scale = 0.4;
+          }
+          const s = ring.userData.scale;
+          ring.scale.set(s, s, s);
+        });
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    // --- UI Event Listeners ---
+    function setupEventListeners() {
+      // Presets
+      document.getElementById('btnPresetBaseline').addEventListener('click', () => applyPreset('baseline'));
+      document.getElementById('btnPresetRecommended').addEventListener('click', () => applyPreset('recommended'));
+      document.getElementById('btnPresetMax').addEventListener('click', () => applyPreset('max_points'));
+
+      // Viewport Floating Buttons
+      document.getElementById('btnResetCamera').addEventListener('click', () => {
+        if (modelBounds && modelBounds.center) {
+          controls.target.copy(modelBounds.center);
+          camera.position.set(
+            modelBounds.center.x + modelBounds.size.x * 1.5,
+            modelBounds.center.y + modelBounds.size.y * 2.8,
+            modelBounds.center.z + modelBounds.size.z * 1.8
+          );
+          controls.update();
+        }
+        // Ensure ceiling is OFF on reset
+        state.ceilingVisible = false;
+        ceilingMeshes.forEach(c => c.visible = false);
+        document.getElementById('lblCeilingStatus').innerText = 'OFF';
+        document.getElementById('lblCeilingStatus').className = 'text-slate-400';
+      });
+
+      document.getElementById('btnToggleCeiling').addEventListener('click', () => {
+        state.ceilingVisible = !state.ceilingVisible;
+        ceilingMeshes.forEach(c => c.visible = state.ceilingVisible);
+        document.getElementById('lblCeilingStatus').innerText = state.ceilingVisible ? 'ON' : 'OFF';
+        document.getElementById('lblCeilingStatus').className = state.ceilingVisible ? 'text-emerald-400' : 'text-slate-400';
+      });
+
+      // Generic Slider Helpers
+      const bindInput = (id, key, isFloat = false) => {
+        const el = document.getElementById(id);
+        el.addEventListener('input', (e) => {
+          state[key] = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value);
+          updateUI();
+        });
+      };
+
+      // Biophilic
+      bindInput('rngNatureView', 'natureViewPct');
+      bindInput('rngPlantCoverage', 'plantCoveragePct');
+
+      // Thermal
+      bindInput('rngOperativeTemp', 'operativeTemp', true);
+
+      // Acoustics
+      bindInput('rngHVACNoise', 'hvacNoiseDBA');
+      bindInput('rngWallSTC', 'wallSTC');
+      bindInput('rngCeilingNRC', 'ceilingNRC', true);
+
+      // Lighting
+      bindInput('rngGlazingVLT', 'glazingVLTPct');
+      bindInput('rngCRI', 'criRating');
+      bindInput('rngSDA', 'sdaPct');
+    }
+
+    // --- Start Application ---
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      init3D();
+      setupEventListeners();
+      updateUI();
+    });
+  </script>
+</body>
+</html>
