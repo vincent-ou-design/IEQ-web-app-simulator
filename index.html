@@ -113,7 +113,7 @@
   <main class="flex-1 flex overflow-hidden relative">
 
     <!-- LEFT: 3D Viewport Area (65%) -->
-    <div class="relative w-full lg:w-[65%] h-full bg-[#fffff0] overflow-hidden flex flex-col">
+    <div class="relative w-full lg:w-[65%] h-full bg-[#d3d3d3] overflow-hidden flex flex-col">
       <!-- Three.js Canvas Container -->
       <div id="canvasContainer" class="w-full h-full relative cursor-grab active:cursor-grabbing"></div>
 
@@ -238,9 +238,8 @@
               <input type="range" id="rngPlantCoverage" min="0" max="30" value="0" class="w-full">
               <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
                 <span>0% None</span>
-                <span>10% (PLANT_10)</span>
-                <span>20% (PLANT_20)</span>
-                <span>30% (PLANT_30)</span>
+                <span>10% (PLANT_10 + 20)</span>
+                <span>30% (+ PLANT_30)</span>
               </div>
               <div class="text-[10px] text-slate-400 mt-0.5">Threshold: &ge;10% coverage awards +1 pt</div>
             </div>
@@ -295,9 +294,9 @@
               </div>
               <input type="range" id="rngHVACNoise" min="25" max="55" value="48" class="w-full">
               <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
-                <span>&lt;35 dBA (20% wave)</span>
-                <span>35-40 dBA (40% wave)</span>
-                <span>55 dBA (80% wave)</span>
+                <span>&lt;35 dBA (0% wave)</span>
+                <span>35-40 dBA (5% wave)</span>
+                <span>55 dBA (10% wave)</span>
               </div>
             </div>
 
@@ -357,7 +356,7 @@
                 <span>Spatial Daylight Autonomy (sDA %)</span>
                 <span id="valSDA" class="font-mono text-yellow-400 font-bold">40%</span>
               </div>
-              <input type="range" id="rngSDA" min="10" max="95" value="40" class="w-full">
+              <input type="range" id="rngSDA" min="10" max="100" value="40" class="w-full">
               <div class="text-[10px] text-slate-500 mt-0.5">&ge;55% (+1 pt) | &ge;75% (+3 pts)</div>
             </div>
           </div>
@@ -601,7 +600,7 @@
     let scene, camera, renderer, controls;
     let roomGroup, ceilingMeshes = [];
     let outdoorStreetGroup, siteFloorMesh;
-    let ambientLight, sunLight;
+    let ambientLight, sunLight, daylightLight, thermalLight;
     let modelBounds = { center: new THREE.Vector3(0, 0, 0), size: new THREE.Vector3(10, 3, 10) };
 
     // Component Registry for Tag-Based Binding
@@ -609,6 +608,7 @@
       occupants: [],     // OCC_
       windows: [],       // GLZ_
       ceilings: [],      // CEIL_
+      walls: [],         // WALL_
       lights: [],        // LIGHT_
       lightObjects: [],  // Three.js PointLights created dynamically
       plants10: [],      // PLANT_10
@@ -616,7 +616,7 @@
       plants30: []       // PLANT_30
     };
 
-    // Sound Wave Rings Array (distributed on top of OCC_)
+    // Single room-center acoustic wave emitter
     const soundWaveEmitters = [];
 
     function init3D() {
@@ -624,9 +624,9 @@
       const width = container.clientWidth;
       const height = container.clientHeight;
 
-      // 1. Scene with light background #fffff0
+      // 1. Pure white viewport background
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xfffff0);
+      scene.background = new THREE.Color(0xd3d3d3);
 
       // 2. Camera: Positioned in isometric view matching user screenshot
       camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 2000);
@@ -636,6 +636,8 @@
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
       renderer.setSize(width, height);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      // SketchUp exports can contain thousands of repeated child nodes.
+      // Keep shadows on the ground, but avoid per-object shadow draw cost.
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       container.appendChild(renderer.domElement);
@@ -650,24 +652,41 @@
       controls.target.set(160, 40, 100);
 
       // 5. Environmental Lighting
-      ambientLight = new THREE.AmbientLight(0xfffbeb, 0.9);
+      ambientLight = new THREE.AmbientLight(0xfffbeb, 0.5);
       scene.add(ambientLight);
 
-      sunLight = new THREE.DirectionalLight(0xfffaed, 1.3);
-      sunLight.position.set(300, 500, 350);
+      daylightLight = new THREE.DirectionalLight(0xfff4dc, 0.0);
+      daylightLight.position.set(-50, 120, 40);
+      scene.add(daylightLight);
+
+      thermalLight = new THREE.HemisphereLight(0xffe8d3, 0x70452f, 0.0);
+      scene.add(thermalLight);
+
+      sunLight = new THREE.DirectionalLight(0xfff8f0, 0.05);
+      sunLight.position.set(50, 80, 60);
       sunLight.castShadow = true;
       sunLight.shadow.mapSize.width = 2048;
       sunLight.shadow.mapSize.height = 2048;
-      sunLight.shadow.camera.near = 10;
-      sunLight.shadow.camera.far = 1500;
-      sunLight.shadow.camera.left = -400;
-      sunLight.shadow.camera.right = 400;
-      sunLight.shadow.camera.top = 400;
-      sunLight.shadow.camera.bottom = -400;
-      sunLight.shadow.bias = -0.0005;
+      sunLight.shadow.camera.near = 0.5;
+      sunLight.shadow.camera.far = 500;
+      sunLight.shadow.camera.left = -50;
+      sunLight.shadow.camera.right = 50;
+      sunLight.shadow.camera.top = 50;
+      sunLight.shadow.camera.bottom = -50;
+      sunLight.shadow.bias = -0.001;
+      sunLight.shadow.normalBias = 0.04;
       scene.add(sunLight);
 
-      // 6. Build Expanded Site Floor (#202a44)
+      // Fill light from opposite side so no face is pitch-black
+      const fillLight = new THREE.DirectionalLight(0xe8f4ff, 0.25);
+      fillLight.position.set(-40, 30, -40);
+      scene.add(fillLight);
+
+      // Soft bottom bounce (simulates floor GI)
+      const bounceLight = new THREE.HemisphereLight(0xffffff, 0x202a44, 0.2);
+      scene.add(bounceLight);
+
+      // 6. Build the white site floor outside the room
       buildSiteFloor();
 
       // 7. Load GLB Model
@@ -687,42 +706,43 @@
       renderer.setSize(w, h);
     }
 
-    // --- Expanded Site Floor (#202a44) covering entire building ---
+    // --- Muted brown-gray site floor outside the building ---
     function buildSiteFloor() {
-      // Large site ground plane (800x800 units) to cover beyond the marked building boundary
-      const siteGeo = new THREE.PlaneGeometry(900, 900);
-      const siteMat = new THREE.MeshStandardMaterial({
-        color: 0x202a44,
-        roughness: 0.85,
-        metalness: 0.1
-      });
+      // Start with a small placeholder; resized in loadModel() once we know the real bounds
+      const siteGeo = new THREE.PlaneGeometry(10, 10);
+      const siteMat = new THREE.MeshBasicMaterial({ color: 0x544c4a });
       siteFloorMesh = new THREE.Mesh(siteGeo, siteMat);
       siteFloorMesh.rotation.x = -Math.PI / 2;
-      siteFloorMesh.position.set(160, -0.5, 100);
-      siteFloorMesh.receiveShadow = true;
+      siteFloorMesh.position.set(0, -0.1, 0);
+      siteFloorMesh.receiveShadow = false;
       scene.add(siteFloorMesh);
     }
 
-    // --- Sound Wave Emitters on top of OCC_ desks ---
-    function createSoundWaveEmitter(pos) {
+    // --- Single acoustic source at the room center ---
+    function createSoundWaveEmitter(pos, roomSizeRef) {
       const emitterGroup = new THREE.Group();
       emitterGroup.position.copy(pos);
-      // Place ripple rings above desk head height (approx +25 to +40 units up)
-      emitterGroup.position.y += 35;
-
       const rings = [];
       const ringCount = 3;
+      // Ring radius proportional to room width (~6% per ring, expand outward)
+      const baseR = roomSizeRef * 0.075;
+      const ringW  = Math.max(roomSizeRef * 0.012, 1.5);
       for (let i = 0; i < ringCount; i++) {
-        const ringGeo = new THREE.RingGeometry(8, 11, 32);
+        const inner = baseR + i * baseR * 0.8;
+        const outer = inner + ringW;
+        const ringGeo = new THREE.RingGeometry(inner, outer, 48);
         const ringMat = new THREE.MeshBasicMaterial({
           color: 0xa855f7,
           side: THREE.DoubleSide,
           transparent: true,
-          opacity: 0.4
+          opacity: 0.4,
+          depthWrite: false
         });
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.rotation.x = Math.PI / 2;
-        ring.userData = { scale: 0.5 + i * 0.8 };
+        // Stagger each ring's animation phase so they ripple outward
+        ring.userData = { phase: i / ringCount, baseScale: 0.75 };
+        ring.scale.setScalar(ring.userData.baseScale);
         emitterGroup.add(ring);
         rings.push(ring);
       }
@@ -736,18 +756,32 @@
       const loader = new THREE.GLTFLoader();
       const pathsToTry = appConfig.model_paths || ["./3D Model/Room RAO601.glb", "./3D Model/room_model.glb", "./room_model.glb"];
       let triedIndex = 0;
+      const statusText = document.getElementById('modelStatusText');
+      const statusDot = document.getElementById('modelStatusDot');
+      const statusStartedAt = performance.now();
+
+      function setModelStatus(message, isError = false) {
+        statusText.innerText = message;
+        statusDot.className = isError
+          ? 'w-2 h-2 rounded-full bg-rose-400'
+          : 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+      }
 
       function attemptLoad() {
         if (triedIndex >= pathsToTry.length) {
           console.error("Could not load model from specified paths.");
+          setModelStatus('Model failed to load', true);
+          document.getElementById('activeModelNotice').innerText = `Could not load: ${pathsToTry.join(' · ')}`;
           return;
         }
 
         const currentPath = pathsToTry[triedIndex];
+        setModelStatus(`Downloading model (${triedIndex + 1}/${pathsToTry.length})…`);
         loader.load(
           currentPath,
           (gltf) => {
             console.log("Loaded custom 3D model:", currentPath);
+            setModelStatus('Preparing 3D scene…');
             roomGroup = gltf.scene;
 
             // Compute exact bounding box of the model
@@ -759,7 +793,7 @@
             if (siteFloorMesh) {
               siteFloorMesh.position.set(modelBounds.center.x, box.min.y - 0.5, modelBounds.center.z);
               const maxDim = Math.max(modelBounds.size.x, modelBounds.size.z) * 3.5;
-              siteFloorMesh.scale.set(maxDim / 900, maxDim / 900, 1);
+              siteFloorMesh.scale.set(maxDim / 10, maxDim / 10, 1);
             }
 
             // Target camera to center of room
@@ -771,72 +805,111 @@
             );
             controls.update();
 
-            // Architectural clay material for solid building properties (#d3d3d3)
-            const clayMat = new THREE.MeshStandardMaterial({
-              color: 0xd3d3d3,
-              roughness: 0.75,
-              metalness: 0.05
-            });
+            const tagMaterials = {
+              gray: new THREE.MeshStandardMaterial({ color: 0x454545, roughness: 0.82 }),
+              wall: new THREE.MeshStandardMaterial({ color: 0x454545, roughness: 0.82 }),
+              area: new THREE.MeshStandardMaterial({ color: 0x8b5e34, roughness: 0.86 }),
+              desk: new THREE.MeshStandardMaterial({ color: 0x4b3022, roughness: 0.78 }),
+              ceiling: new THREE.MeshStandardMaterial({ color: 0x4b5058, roughness: 0.9 }),
+              light: new THREE.MeshStandardMaterial({ color: 0x3b3f46, emissive: 0x25282d, emissiveIntensity: 0.15, roughness: 0.5 }),
+              plant: new THREE.MeshStandardMaterial({ color: 0x278347, roughness: 0.82 }),
+              glass: new THREE.MeshStandardMaterial({ color: 0x4b91d1, transparent: true, opacity: 0.5, roughness: 0.28, depthWrite: false, side: THREE.DoubleSide }),
+              door: new THREE.MeshStandardMaterial({ color: 0xa87808, roughness: 0.78 })
+            };
+            const plantMeshesByTier = {
+              10: new Set(),
+              20: new Set(),
+              30: new Set()
+            };
 
-            // Vision glazing physical material
-            const glassMat = new THREE.MeshPhysicalMaterial({
-              color: 0x93c5fd,
-              transparent: true,
-              opacity: 0.35,
-              roughness: 0.1,
-              transmission: 0.85,
-              thickness: 1.0
-            });
+            function getElementTag(object) {
+              // Plant groups can be nested inside a generic Desk_Standard
+              // component, so plant tags must take precedence over that parent.
+              for (let node = object; node && node !== roomGroup; node = node.parent) {
+                const name = (node.name || '').toUpperCase();
+                if (name.includes('PLANT_10') || name.includes('PLANT_20') || name.includes('PLANT_30')) return 'plant';
+              }
+              for (let node = object; node && node !== roomGroup; node = node.parent) {
+                const name = (node.name || '').toUpperCase();
+                if (name.includes('AREA_OCC')) return 'area';
+                if (name.includes('DESK_') || name.includes('OCC_')) return 'desk';
+                if (name.includes('CEILING_') || name.includes('CEIL_')) return 'ceiling';
+                if (name.includes('LIGHT_')) return 'light';
+                if (name.includes('PLANT_10') || name.includes('PLANT_20') || name.includes('PLANT_30')) return 'plant';
+                if (name.includes('GLZ_')) return 'glass';
+                if (name.includes('DR_')) return 'door';
+                if (name.includes('WALL')) return 'wall';
+                if (name.includes('OBST_')) return 'gray';
+              }
+              return null;
+            }
 
-            const uniqueOccPositions = [];
-
-            // Traverse and apply styling + tag bindings
+            // Traverse and apply styling + tag bindings. Report progress during
+            // this synchronous pass so large SketchUp hierarchies are not mistaken
+            // for a stalled network download.
+            let traversedNodes = 0;
+            const totalNodes = gltf.parser.json.nodes?.length || 0;
             roomGroup.traverse((child) => {
+              traversedNodes++;
+              if (totalNodes && traversedNodes % 1000 === 0) {
+                setModelStatus(`Preparing scene (${Math.min(99, Math.round(traversedNodes / totalNodes * 100))}%)…`);
+              }
               if (child.isMesh) {
                 child.castShadow = true;
-                child.receiveShadow = true;
+                // Receiving shadows on overlapping SketchUp surfaces can make
+                // whole faces appear black. Let the site floor receive them.
+                child.receiveShadow = false;
+                const elementTag = getElementTag(child);
+                if (elementTag && tagMaterials[elementTag]) {
+                  child.material = tagMaterials[elementTag];
+                  if (elementTag === 'glass') child.renderOrder = 2;
+                  if (elementTag === 'wall') bindings.walls.push(child);
+                }
               }
 
               const n = (child.name || "").toUpperCase();
 
               // Plants (PLANT_10, PLANT_20, PLANT_30)
               if (n.includes("PLANT_10")) {
-                bindings.plants10.push(child);
+                child.traverse(mesh => {
+                  if (mesh.isMesh) {
+                    mesh.material = tagMaterials.plant;
+                    plantMeshesByTier[10].add(mesh);
+                  }
+                });
               } else if (n.includes("PLANT_20")) {
-                bindings.plants20.push(child);
+                child.traverse(mesh => {
+                  if (mesh.isMesh) {
+                    mesh.material = tagMaterials.plant;
+                    plantMeshesByTier[20].add(mesh);
+                  }
+                });
               } else if (n.includes("PLANT_30")) {
-                bindings.plants30.push(child);
+                child.traverse(mesh => {
+                  if (mesh.isMesh) {
+                    mesh.material = tagMaterials.plant;
+                    plantMeshesByTier[30].add(mesh);
+                  }
+                });
               }
               // Windows (GLZ_)
               else if (n.startsWith("GLZ_") || n.includes("GLZ_")) {
-                if (child.isMesh) {
-                  child.material = glassMat.clone();
-                }
                 bindings.windows.push(child);
               }
               // Ceilings (CEIL_) -> OFF by default!
-              else if (n.startsWith("CEIL_") || n.includes("CEIL_")) {
-                if (child.isMesh) child.material = clayMat.clone();
+              else if (n.startsWith("CEIL_") || n.includes("CEIL_") || n.startsWith("CEILING_") || n.includes("CEILING_")) {
                 child.visible = false; // Initial state OFF
                 ceilingMeshes.push(child);
                 bindings.ceilings.push(child);
               }
               // Lights (LIGHT_)
               else if (n.startsWith("LIGHT_") || n.includes("LIGHT_")) {
-                // Make fixture emissive
-                if (child.isMesh) {
-                  child.material = new THREE.MeshStandardMaterial({
-                    color: 0xffffff,
-                    emissive: 0xffedd5,
-                    emissiveIntensity: 1.2
-                  });
-                }
                 bindings.lights.push(child);
 
                 // Attach real downward PointLight at world coordinate
                 const worldPos = new THREE.Vector3();
                 child.getWorldPosition(worldPos);
-                const light = new THREE.PointLight(0xffedd5, 1.5, 120);
+                const light = new THREE.PointLight(0xffd700, 1.0, 120);
                 light.position.copy(worldPos);
                 light.position.y -= 5;
                 light.castShadow = true;
@@ -846,53 +919,41 @@
               }
               // Occupant Workstations (OCC_)
               else if (n.startsWith("OCC_") || n.includes("OCC_")) {
-                if (child.isMesh) child.material = clayMat;
                 bindings.occupants.push(child);
-
-                // Collect distinct workstation world positions for sound waves
-                const occPos = new THREE.Vector3();
-                child.getWorldPosition(occPos);
-                const isClose = uniqueOccPositions.some(p => p.distanceTo(occPos) < 25);
-                if (!isClose) {
-                  uniqueOccPositions.push(occPos);
-                }
               }
-              // All other architectural properties -> Color #d3d3d3
-              else if (child.isMesh && !n.includes("PLANT")) {
-                child.material = clayMat;
-              }
+              // Keep the GLB's authored materials on architectural meshes.
+              // Replacing them with a standard gray clay material discards
+              // SketchUp's face colors and can flatten the model visually.
             });
 
-            // Create sound wave emitters above the collected OCC_ positions
-            if (uniqueOccPositions.length > 0) {
-              uniqueOccPositions.forEach(pos => createSoundWaveEmitter(pos));
-            } else {
-              // Fallback: 4 grid points across room
-              for (let dx = -0.3; dx <= 0.3; dx += 0.6) {
-                for (let dz = -0.3; dz <= 0.3; dz += 0.6) {
-                  const fallbackPos = new THREE.Vector3(
-                    modelBounds.center.x + modelBounds.size.x * dx,
-                    modelBounds.center.y,
-                    modelBounds.center.z + modelBounds.size.z * dz
-                  );
-                  createSoundWaveEmitter(fallbackPos);
-                }
-              }
-            }
+            // Bind actual mesh leaves, not imported group nodes. This avoids
+            // visibility changes being masked by nested SketchUp components.
+            bindings.plants10 = Array.from(plantMeshesByTier[10]);
+            bindings.plants20 = Array.from(plantMeshesByTier[20]);
+            bindings.plants30 = Array.from(plantMeshesByTier[30]);
+
+            // One acoustic source centered in the room.
+            createSoundWaveEmitter(modelBounds.center, Math.max(modelBounds.size.x, modelBounds.size.z));
 
             scene.add(roomGroup);
 
             // Add outdoor nature trees outside glazing facade
             buildOutdoorNature(modelBounds);
 
-            document.getElementById('modelStatusDot').className = "w-2 h-2 rounded-full bg-cyan-400";
-            document.getElementById('modelStatusText').innerText = "Room RAO601 Active";
+            const elapsedSeconds = Math.max(0.1, (performance.now() - statusStartedAt) / 1000);
+            statusDot.className = "w-2 h-2 rounded-full bg-cyan-400";
+            statusText.innerText = `Model ready · ${elapsedSeconds.toFixed(1)}s`;
             document.getElementById('activeModelNotice').innerText = `Active Model: ${currentPath}`;
             
             updateUI();
           },
-          undefined,
-          () => {
+          (progress) => {
+            if (progress.lengthComputable) {
+              setModelStatus(`Downloading model (${Math.round(progress.loaded / progress.total * 100)}%)…`);
+            }
+          },
+          (error) => {
+            console.error(`Model path failed: ${currentPath}`, error);
             triedIndex++;
             attemptLoad();
           }
@@ -943,18 +1004,6 @@
       scene.add(outdoorStreetGroup);
     }
 
-    // --- Helper to Set Object Hierarchy Opacity ---
-    function setGroupOpacity(groupOrMesh, opacityVal) {
-      if (!groupOrMesh) return;
-      groupOrMesh.traverse ? groupOrMesh.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.material.transparent = true;
-          child.material.opacity = opacityVal;
-          child.visible = opacityVal > 0.01;
-        }
-      }) : (groupOrMesh.material && (groupOrMesh.material.opacity = opacityVal));
-    }
-
     // --- 3D Scene Dynamic Synchronization ---
     function update3DScene() {
       // 1. Biophilic: Direct Nature View % Outside Window
@@ -965,69 +1014,101 @@
         if (tier2) tier2.visible = state.natureViewPct >= 80;
       }
 
-      // 2. Biophilic: Staged Plant Coverage Opacity Transitions
-      // Tier 1 (1% - 10%)
-      const op10 = THREE.MathUtils.clamp(state.plantCoveragePct / 10.0, 0.0, 1.0);
-      bindings.plants10.forEach(p => setGroupOpacity(p, op10));
+      // 2. Plant activation thresholds: tiers 10 and 20 start together at 10%.
+      const showEarlyPlantTiers = state.plantCoveragePct >= 10;
+      bindings.plants10.forEach(mesh => { mesh.visible = showEarlyPlantTiers; });
 
-      // Tier 2 (11% - 20%)
-      const op20 = THREE.MathUtils.clamp((state.plantCoveragePct - 10.0) / 10.0, 0.0, 1.0);
-      bindings.plants20.forEach(p => setGroupOpacity(p, op20));
+      bindings.plants20.forEach(mesh => { mesh.visible = showEarlyPlantTiers; });
 
-      // Tier 3 (21% - 30%)
-      const op30 = THREE.MathUtils.clamp((state.plantCoveragePct - 20.0) / 10.0, 0.0, 1.0);
-      bindings.plants30.forEach(p => setGroupOpacity(p, op30));
+      const showFinalPlantTier = state.plantCoveragePct >= 30;
+      bindings.plants30.forEach(mesh => { mesh.visible = showFinalPlantTier; });
 
-      // 3. Thermal Comfort: Color Warmth Progression (18°C neutral to 28°C amber)
+      // 3. Thermal Comfort: stronger cool-to-warm shift across the full range
       const warmthFactor = THREE.MathUtils.clamp((state.operativeTemp - 18.0) / 10.0, 0.0, 1.0);
       if (ambientLight) {
-        // From crisp neutral white (0.16) to warm amber (0.07)
-        ambientLight.color.setHSL(0.16 - warmthFactor * 0.09, 0.3 + warmthFactor * 0.5, 0.9 - warmthFactor * 0.1);
+        ambientLight.color.copy(new THREE.Color(0xdceeff).lerp(new THREE.Color(0xffa36f), warmthFactor));
+      }
+      if (thermalLight) {
+        thermalLight.intensity = warmthFactor * 0.65;
+        thermalLight.color.set(0xffb276);
+        thermalLight.groundColor.set(0x71391f);
       }
 
       // 4. Sound & Acoustics: Sound Wave Opacity Calculation
-      // <35 dBA: 20% opacity; 35-40 dBA: ~40%; 55 dBA: 80%
-      let waveOpacity = 0.40;
-      if (state.hvacNoiseDBA < 35) {
-        waveOpacity = 0.20;
-      } else if (state.hvacNoiseDBA <= 40) {
-        waveOpacity = 0.20 + ((state.hvacNoiseDBA - 35) / 5) * 0.20; // 0.20 to 0.40
-      } else {
-        waveOpacity = 0.40 + ((state.hvacNoiseDBA - 40) / 15) * 0.40; // 0.40 to 0.80
+      // Quiet <35 dBA: 0%; medium 35-40 dBA: 0-5%; loud 40-55 dBA: 5-10%.
+      let waveOpacity = 0;
+      if (state.hvacNoiseDBA >= 35 && state.hvacNoiseDBA <= 40) {
+        waveOpacity = ((state.hvacNoiseDBA - 35) / 5) * 0.05;
+      } else if (state.hvacNoiseDBA > 40) {
+        waveOpacity = 0.05 + THREE.MathUtils.clamp((state.hvacNoiseDBA - 40) / 15, 0, 1) * 0.05;
       }
 
       document.getElementById('lblWaveOpacity').innerText = `${Math.round(waveOpacity * 100)}%`;
       soundWaveEmitters.forEach(emitter => {
         emitter.rings.forEach(ring => {
           ring.material.opacity = waveOpacity;
-          ring.visible = waveOpacity > 0.05;
+          ring.visible = waveOpacity > 0;
         });
       });
 
       // 5. Lighting Quality: Glazing VLT and Luminaire Emissivity
       const vltRatio = state.glazingVLTPct / 100.0;
+      const lowVltTint = new THREE.Color(0x284a78);
+      const highVltTint = new THREE.Color(0xa8d9ff);
       bindings.windows.forEach(win => {
         if (win.material) {
           win.material.transparent = true;
-          win.material.opacity = 0.15 + vltRatio * 0.65;
+          win.material.opacity = 0.5;
+          win.material.color.copy(lowVltTint).lerp(highVltTint, vltRatio);
           win.material.roughness = THREE.MathUtils.clamp(1.0 - vltRatio, 0.05, 0.85);
         }
       });
 
-      // Luminaire CRI warmth & intensity
-      const criFactor = (state.criRating - 70) / 28.0; // 0 (70 Ra) to 1 (98 Ra)
-      const lightIntensity = 1.0 + criFactor * 0.8;
+      // sDA drives natural daylight up and artificial-light output down.
+      const daylightFactor = THREE.MathUtils.clamp(state.sdaPct / 100, 0, 1);
+      let artificialDemand;
+      if (state.sdaPct <= 10) {
+        artificialDemand = 0.5 + (10 - state.sdaPct) / 10 * 0.5;
+      } else if (state.sdaPct < 95) {
+        artificialDemand = 0.5 - ((state.sdaPct - 10) / 85) * 0.3;
+      } else {
+        artificialDemand = 0.2 * THREE.MathUtils.clamp((100 - state.sdaPct) / 5, 0, 1);
+      }
+      if (daylightLight) daylightLight.intensity = daylightFactor * 0.85;
+      if (sunLight) sunLight.intensity = 0.05 + daylightFactor * 1.1;
+
+      // CRI uses a gentle, low-saturation palette; fixture output follows daylight need.
+      const criFactor = THREE.MathUtils.clamp((state.criRating - 70) / 28.0, 0, 1);
+      const fixtureWarmth = new THREE.Color(0xffd9bd).lerp(new THREE.Color(0xfff1df), criFactor);
+      const fixtureEmissive = artificialDemand * (0.55 + criFactor * 0.2);
 
       bindings.lights.forEach(l => {
         if (l.material && l.material.emissive) {
-          l.material.emissiveIntensity = lightIntensity;
-          l.material.emissive.setHSL(0.14 - criFactor * 0.06, 0.75, 0.6);
+          l.material.emissiveIntensity = fixtureEmissive;
         }
       });
 
       bindings.lightObjects.forEach(light => {
-        light.intensity = lightIntensity;
-        light.color.setHSL(0.14 - criFactor * 0.06, 0.75, 0.7);
+        light.intensity = artificialDemand * (0.8 + criFactor * 0.3);
+        light.color.copy(fixtureWarmth);
+      });
+
+      // Higher STC and NRC make the corresponding tagged surfaces darker.
+      const stcFactor = THREE.MathUtils.clamp((state.wallSTC - 30) / 30, 0, 1);
+      const wallShade = new THREE.Color(0x454545).lerp(new THREE.Color(0x171717), stcFactor);
+      bindings.walls.forEach(wall => wall.material.color.copy(wallShade));
+
+      const nrcFactor = THREE.MathUtils.clamp((state.ceilingNRC - 0.4) / 0.55, 0, 1);
+      const ceilingShade = new THREE.Color(0x4b5058).lerp(new THREE.Color(0x202329), nrcFactor);
+      ceilingMeshes.forEach(ceiling => {
+        const recolor = child => {
+          if (child.isMesh && child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach(material => material.color && material.color.copy(ceilingShade));
+          }
+        };
+        if (ceiling.traverse) ceiling.traverse(recolor);
+        else recolor(ceiling);
       });
     }
 
@@ -1037,17 +1118,13 @@
       requestAnimationFrame(animate);
       controls.update();
 
-      const delta = clock.getDelta();
+      clock.getDelta();
 
-      // Pulsing Expanding Sound Wave Rings over OCC_ desks
+      // Pulsing expanding sound-wave rings at the center of the room
       soundWaveEmitters.forEach(emitter => {
         emitter.rings.forEach(ring => {
-          ring.userData.scale += delta * 1.5;
-          if (ring.userData.scale > 3.5) {
-            ring.userData.scale = 0.4;
-          }
-          const s = ring.userData.scale;
-          ring.scale.set(s, s, s);
+          const phase = (clock.elapsedTime * 0.75 + ring.userData.phase) % 1;
+          ring.scale.setScalar(ring.userData.baseScale + phase * 0.85);
         });
       });
 
