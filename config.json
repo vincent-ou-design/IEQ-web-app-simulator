@@ -25,7 +25,7 @@
     },
     "recommended": {
       "name": "Recommended Strategy",
-      "nature_view_pct": 60,
+      "nature_view_pct": 30,
       "plant_coverage_pct": 12,
       "operative_temp": 22.5,
       "wall_stc": 48,
@@ -33,7 +33,7 @@
       "hvac_noise_dba": 38,
       "glazing_vlt_pct": 45,
       "cri_rating": 92,
-      "sda_pct": 60
+      "sda_pct": 50
     },
     "max_points": {
       "name": "Max 7 Points (Capped)",

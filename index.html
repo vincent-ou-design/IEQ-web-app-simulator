@@ -295,8 +295,8 @@
               <input type="range" id="rngHVACNoise" min="25" max="55" value="48" class="w-full">
               <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
                 <span>&lt;35 dBA (0% wave)</span>
-                <span>35-40 dBA (5% wave)</span>
-                <span>55 dBA (10% wave)</span>
+                <span>35-40 dBA (10% wave)</span>
+                <span>55 dBA (20% wave)</span>
               </div>
             </div>
 
@@ -407,10 +407,10 @@
           glazingVLTPct: 25, criRating: 75, sdaPct: 40
         },
         recommended: {
-          natureViewPct: 60, plantCoveragePct: 12,
+          natureViewPct: 30, plantCoveragePct: 12,
           operativeTemp: 22.5,
           hvacNoiseDBA: 38, wallSTC: 48, ceilingNRC: 0.75,
-          glazingVLTPct: 45, criRating: 92, sdaPct: 60
+          glazingVLTPct: 45, criRating: 92, sdaPct: 50
         },
         max_points: {
           natureViewPct: 80, plantCoveragePct: 15,
@@ -571,16 +571,16 @@
       // Status Badge
       const badge = document.getElementById('scoreBadge');
       if (res.cappedTotal >= 7.0) {
-        badge.innerText = 'Platinum Exemplary Performance';
+        badge.innerText = '7-Point Credit Maximum';
         badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium border bg-cyan-950/70 text-cyan-300 border-cyan-500/60 shadow-[0_0_12px_rgba(6,182,212,0.3)]';
       } else if (res.cappedTotal >= 5.0) {
-        badge.innerText = 'LEED Gold Strategy';
+        badge.innerText = 'Strong Credit Score';
         badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium border bg-emerald-950/70 text-emerald-300 border-emerald-500/60';
       } else if (res.cappedTotal >= 3.0) {
-        badge.innerText = 'LEED Silver Target';
+        badge.innerText = 'Developing Credit Score';
         badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium border bg-amber-950/70 text-amber-300 border-amber-500/60';
       } else {
-        badge.innerText = 'Baseline / Non-Compliant';
+        badge.innerText = 'Baseline / Low Credit Score';
         badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-medium border bg-red-950/60 text-red-300 border-red-700/50';
       }
 
@@ -706,6 +706,19 @@
       renderer.setSize(w, h);
     }
 
+    function setRoomCameraView() {
+      if (!camera || !controls || !modelBounds) return;
+      const center = modelBounds.center;
+      const size = modelBounds.size;
+      controls.target.copy(center);
+      camera.position.set(
+        center.x + size.x * 1.1,
+        center.y + size.y * 2.6,
+        center.z + size.z * 1.3
+      );
+      controls.update();
+    }
+
     // --- Muted brown-gray site floor outside the building ---
     function buildSiteFloor() {
       // Start with a small placeholder; resized in loadModel() once we know the real bounds
@@ -726,17 +739,18 @@
       const ringCount = 3;
       // Ring radius proportional to room width (~6% per ring, expand outward)
       const baseR = roomSizeRef * 0.075;
-      const ringW  = Math.max(roomSizeRef * 0.012, 1.5);
+      const ringW  = Math.max(roomSizeRef * 0.015, 0.14);
       for (let i = 0; i < ringCount; i++) {
         const inner = baseR + i * baseR * 0.8;
         const outer = inner + ringW;
         const ringGeo = new THREE.RingGeometry(inner, outer, 48);
         const ringMat = new THREE.MeshBasicMaterial({
-          color: 0xa855f7,
+          color: 0xd946ef,
           side: THREE.DoubleSide,
           transparent: true,
           opacity: 0.4,
-          depthWrite: false
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
         });
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.rotation.x = Math.PI / 2;
@@ -796,14 +810,8 @@
               siteFloorMesh.scale.set(maxDim / 10, maxDim / 10, 1);
             }
 
-            // Target camera to center of room
-            controls.target.copy(modelBounds.center);
-            camera.position.set(
-              modelBounds.center.x + modelBounds.size.x * 1.5,
-              modelBounds.center.y + modelBounds.size.y * 2.8,
-              modelBounds.center.z + modelBounds.size.z * 1.8
-            );
-            controls.update();
+            // Reset to a closer, higher three-quarter view of the open room.
+            setRoomCameraView();
 
             const tagMaterials = {
               gray: new THREE.MeshStandardMaterial({ color: 0x454545, roughness: 0.82 }),
@@ -1035,12 +1043,12 @@
       }
 
       // 4. Sound & Acoustics: Sound Wave Opacity Calculation
-      // Quiet <35 dBA: 0%; medium 35-40 dBA: 0-5%; loud 40-55 dBA: 5-10%.
+      // Quiet <35 dBA: 0%; medium 35-40 dBA: 0-10%; loud 40-55 dBA: 10-20%.
       let waveOpacity = 0;
       if (state.hvacNoiseDBA >= 35 && state.hvacNoiseDBA <= 40) {
-        waveOpacity = ((state.hvacNoiseDBA - 35) / 5) * 0.05;
+        waveOpacity = ((state.hvacNoiseDBA - 35) / 5) * 0.10;
       } else if (state.hvacNoiseDBA > 40) {
-        waveOpacity = 0.05 + THREE.MathUtils.clamp((state.hvacNoiseDBA - 40) / 15, 0, 1) * 0.05;
+        waveOpacity = 0.10 + THREE.MathUtils.clamp((state.hvacNoiseDBA - 40) / 15, 0, 1) * 0.10;
       }
 
       document.getElementById('lblWaveOpacity').innerText = `${Math.round(waveOpacity * 100)}%`;
@@ -1140,15 +1148,7 @@
 
       // Viewport Floating Buttons
       document.getElementById('btnResetCamera').addEventListener('click', () => {
-        if (modelBounds && modelBounds.center) {
-          controls.target.copy(modelBounds.center);
-          camera.position.set(
-            modelBounds.center.x + modelBounds.size.x * 1.5,
-            modelBounds.center.y + modelBounds.size.y * 2.8,
-            modelBounds.center.z + modelBounds.size.z * 1.8
-          );
-          controls.update();
-        }
+        setRoomCameraView();
         // Ensure ceiling is OFF on reset
         state.ceilingVisible = false;
         ceilingMeshes.forEach(c => c.visible = false);
