@@ -881,6 +881,12 @@
                   child.material = tagMaterials[elementTag];
                   if (elementTag === 'glass') child.renderOrder = 2;
                   if (elementTag === 'wall') bindings.walls.push(child);
+                  // Explicitly bind each door mesh too. The current GLB has
+                  // two DR_Access_Indoor groups with nested mesh leaves.
+                  if (elementTag === 'door') {
+                    bindings.wallToggleTargets.push(child);
+                    child.visible = !state.wallsHidden;
+                  }
                 }
               }
 
