@@ -398,7 +398,8 @@
       sdaPct: 40,
       // 3D View flags
       ceilingVisible: false,
-      wallsHidden: false
+      // OFF is the default wall mode: the toggle targets are hidden.
+      wallsHidden: true
     };
 
     // --- Embedded Configuration Fallback ---
@@ -888,6 +889,7 @@
               // Preserve references to complete named subtrees for the wall toggle.
               if (["WALL_INT_PARTITION_2", "DR_ACCESS_INDOOR", "WALL_INT_ACCESS"].includes(n)) {
                 bindings.wallToggleTargets.push(child);
+                child.visible = !state.wallsHidden;
               }
 
               // Plants (PLANT_10, PLANT_20, PLANT_30)
@@ -1197,8 +1199,8 @@
         state.wallsHidden = !state.wallsHidden;
         bindings.wallToggleTargets.forEach(target => { target.visible = !state.wallsHidden; });
         const status = document.getElementById('lblWallStatus');
-        status.innerText = state.wallsHidden ? 'ON' : 'OFF';
-        status.className = state.wallsHidden ? 'text-emerald-600' : 'text-gray-600';
+        status.innerText = state.wallsHidden ? 'OFF' : 'ON';
+        status.className = state.wallsHidden ? 'text-gray-600' : 'text-emerald-600';
       });
 
       // Generic Slider Helpers
