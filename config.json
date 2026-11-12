@@ -13,7 +13,7 @@
   "presets": {
     "baseline": {
       "name": "Reset Baseline",
-      "nature_view_pct": 30,
+      "nature_view_pct": 0,
       "plant_coverage_pct": 0,
       "operative_temp": 26.5,
       "wall_stc": 35,
